@@ -1,0 +1,13 @@
+[package]
+name = "w7a"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "w7a"
+path = "src/lib.rs"
+
+[dependencies]
+shogi-kifu-converter = "0.2.2"
+book = { path = "../../../../crypto-n-rust/src/libs/book" }
+
