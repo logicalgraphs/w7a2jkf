@@ -1,0 +1,9 @@
+[package]
+name = "w7a2jfk"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+shogi-kifu-converter = "0.2.2"
+book = { path = "../../../crypto-n-rust/src/libs/book" }
+
