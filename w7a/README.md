@@ -7,6 +7,7 @@ thence you can go to any format, using the
 For me, to view on [lishogi](https://lishogi.org/), I output the resulting JSON
 to [KIF](https://lishogi.org/page/kif).
 
+```mermaid
 stateDiagram-v2
     a : file.w7a
     b : JKF JSON
@@ -18,6 +19,7 @@ stateDiagram-v2
     b --> c: convert
     c --> d: view
     d --> [*]
+```
 
 ## Parsing
 
