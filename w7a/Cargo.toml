@@ -8,6 +8,8 @@ name = "w7a"
 path = "src/lib.rs"
 
 [dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_variant = "0.1.0"
 chrono = "0.4.38"
 shogi-kifu-converter = "0.2.2"
 book = { path = "../../../../crypto-n-rust/src/libs/book" }
