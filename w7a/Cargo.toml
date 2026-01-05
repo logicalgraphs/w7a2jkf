@@ -8,6 +8,7 @@ name = "w7a"
 path = "src/lib.rs"
 
 [dependencies]
+chrono = "0.4.38"
 shogi-kifu-converter = "0.2.2"
 book = { path = "../../../../crypto-n-rust/src/libs/book" }
 

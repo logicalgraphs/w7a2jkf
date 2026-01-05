@@ -60,3 +60,7 @@ The translation to KIF of the above `file.w7a` header is
 
 Let's build the header-parser first, then, shall we?
 
+# Revisions
+
+* 0.01, 2026-01-04: parsing English months and `Datish`-values; first tests
+
