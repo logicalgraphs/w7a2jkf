@@ -7,3 +7,9 @@
 /// The translator from w7a to JKF
 pub mod conv;
 
+/// *MY* internal representation of a JKF file
+// pub mod jkf;
+
+/// Types used across the system
+pub mod utils;
+

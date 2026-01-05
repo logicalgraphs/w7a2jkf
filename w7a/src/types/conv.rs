@@ -4,17 +4,17 @@ use chrono::Month;
 
 use book::err_utils::{ErrStr,err_or};
 
+use super::utils::Lookup;
+
 /// Converts from w7a-types to JKF
 
 pub trait Convert { fn convert(&self, raw: &str) -> ErrStr<String>; }
 
-type Lookup = HashMap<String, String>;
-
-pub struct Converter { headers: Lookup }
+pub struct Converter { header: Lookup }
 
 impl Default for Converter {
    fn default() -> Self {
-      Self { headers: headers() }
+      Self { header: headers() }
    }
 }
 
