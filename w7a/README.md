@@ -62,7 +62,19 @@ Let's build the header-parser first, then, shall we?
 
 # Revisions
 
-* 0.03, 2026-01-06: serializing header and initial state to JKF
+* 0.04: 2026-01-06: converter pipelines W7A header to JSON
+
+```JSON
+	"header": {
+		"先手": "Namekata Hisashi, Challenger",
+		"開始日時": "2013/07/10 00:00:01",
+		"後手": "Habu Yoshiharu, Oi",
+		"棋戦": "54th Oi-sen, Game 1" },
+	"initial": {
+		"preset": "HIRATE" }
+```
+
+* 0.03, 2026-01-05: serializing header and initial state to JKF
 * 0.02, 2026-01-05: scanning w7a header-information
 * 0.01, 2026-01-04: parsing English months and `Datish`-values; first tests
 

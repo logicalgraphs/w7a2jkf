@@ -1,43 +1,104 @@
+use std::{
+   collections::HashMap,
+   fmt
+};
+
 use chrono::Month;
 
-use book::err_utils::{ErrStr,err_or};
+use book::{
+   err_utils::{ErrStr,err_or},
+   json_utils::AsJSON
+};
 
-// use super::utils::Lookup;
+use super::{
+   jkf::{Header as JHdr, mk_jhdr, Initial},
+   w7a::Header as Hdr,
+   utils::Lookup
+};
 
 /// Converts from w7a-types to JKF
 
-pub trait Convert { fn convert(&self, raw: &str) -> ErrStr<String>; }
+pub trait Convert<W, J: AsJSON> { 
+   fn convert(&self, domain: &W) -> ErrStr<J>; 
+}
 
-/*
-pub struct Converter { header: Lookup }
+type XformJ = dyn Fn(String) -> ErrStr<JsonString>;
+type Transform<'a> = HashMap<(String, String), &'a XformJ>;
 
-impl Default for Converter {
+pub struct Converter<'a> { header: Transform<'a> }
+
+impl<'a> Default for Converter<'a> {
    fn default() -> Self {
       Self { header: headers() }
    }
 }
 
-fn populate(raw: &[(&str, &str)]) -> Lookup {
+fn to_j_str(s: String) -> ErrStr<JsonString> { Ok(mk_jstr(&s)) }
+fn to_j_dt(s: String) -> ErrStr<JsonString> { convert_date(&s) }
+
+fn populate<'a>(raw: &[((&str, &str), &'a XformJ)]) -> Transform<'a> {
    fn strify((a, b): &(&str, &str)) -> (String, String) {
       (a.to_string(), b.to_string())
    }
-   raw.iter().map(strify).collect()
+   raw.into_iter().map(|(k,v)| (strify(k), v.clone())).collect()
+   // raw.into_iter().map(first(strify)).collect() would be better, but ...
+   // the type-signatures go crazy on dynamic function cloning. Oh, well!
 }
 
-fn headers() -> Lookup {
-   populate(&[("Black", "後手"), ("White", "先手"),
-              ("Event", "棋戦"), ("Date", "開始日時")])
+fn headers<'a>() -> Transform<'a> {
+   populate(&[(("Black", "後手"), &to_j_str), (("White", "先手"), &to_j_str),
+              (("Event", "棋戦"), &to_j_str), (("Date", "開始日時"), &to_j_dt)])
 }
-*/
+
+// The Predule encapsulates the header- and initial-sections of the JKF
+struct Prelude {
+   header: JHdr,
+   initial: Initial
+}
+
+impl AsJSON for Prelude {
+   fn as_json(&self) -> String {
+      format!("{},\n{}", self.header.as_json(), self.initial.as_json())
+   }
+}
+
+impl<'a> Convert<Hdr, Prelude> for Converter<'a> {
+   fn convert(&self, domain: &Hdr) -> ErrStr<Prelude> {
+      let mut hdr: Lookup = HashMap::new();
+      for (key,f) in &self.header {
+         let (k,v) = key;
+         if let Some(raw_val) = domain.header.get(k) {
+            let ans = f(raw_val.to_string())?.as_json();
+            hdr.insert(v.clone(), ans);
+         }
+      }
+      Ok(Prelude { header: mk_jhdr(hdr), initial: Initial::default() })
+   }
+}
 
 // ---- DATE-stuff -------------------------------------------------------
+
+#[derive(Debug,Clone,PartialEq)]
+struct JsonString { string: String }
+fn mk_jstr(s: &str) -> JsonString {
+   JsonString { string: s.to_string() }
+}
+
+impl AsJSON for JsonString {
+   fn as_json(&self) -> String { self.string.clone() }
+}
+impl fmt::Display for JsonString {
+   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+      write!(f, "{}", self.string)
+   }
+}
 
 enum DateConverter { MONTH, DATE }
 
 use DateConverter::*;
 
-impl Convert for DateConverter {
-   fn convert(&self, s: &str) -> ErrStr<String> {
+impl Convert<String, JsonString> for DateConverter {
+   fn convert(&self, s: &String) -> ErrStr<JsonString> {
       match self {
          MONTH => convert_month(s),
          DATE => convert_date(s)
@@ -45,7 +106,7 @@ impl Convert for DateConverter {
    }
 }
 
-fn convert_month(m: &str) -> ErrStr<String> {
+fn convert_month(m: &str) -> ErrStr<JsonString> {
    let mos: Month = err_or(m.parse(), &format!("Can't parse month {m}"))?;
    let n = mos.number_from_month();
    Ok(two_digits(n))
@@ -53,7 +114,7 @@ fn convert_month(m: &str) -> ErrStr<String> {
 
 // the Datish, as you see from the example, is broken up into
 // month [day-of-month information] year
-fn convert_date(dt: &str) -> ErrStr<String> {
+fn convert_date(dt: &str) -> ErrStr<JsonString> {
    let date_parts: Vec<&str> = dt.split(" ").collect();
    let mos = date_parts.first()
                        .ok_or(format!("no month in empty string"))?;
@@ -67,14 +128,16 @@ fn convert_date(dt: &str) -> ErrStr<String> {
    let year_str = date_parts.last()
                             .ok_or("Cannot scan year from empty string")?;
    if year_str.chars().all(|c| c.is_ascii_digit()) {
-      Ok(format!("{year_str}/{m1}/{} 00:00:01", two_digits(d1)))
+      let json = mk_jstr(&format!("{year_str}/{m1}/{} 00:00:01",
+                                  two_digits(d1)));
+      Ok(json)
    } else {
       Err(format!("Cannot parse the year {year_str}"))
    }
 }
 
-fn two_digits(n: u32) -> String {
-   format!("{}{n}", if n < 10 { "0" } else { "" })
+fn two_digits(n: u32) -> JsonString {
+   mk_jstr(&format!("{}{n}", if n < 10 { "0" } else { "" }))
 }
 
 #[cfg(test)]
@@ -82,17 +145,19 @@ mod tests {
 
    use super::*;
 
-   fn convert_month(m: &str) -> ErrStr<String> {
+   use crate::types::w7a::load_w7a_header;
+
+   fn convert_month(m: &String) -> ErrStr<JsonString> {
       MONTH.convert(m)
    }
    
    fn pass_month(m: &str, exp: &str) {
-      let mos = convert_month(m);
-      assert_eq!(Ok(exp.to_string()), mos);
+      let mos = convert_month(&m.to_string());
+      assert_eq!(Ok(mk_jstr(exp)), mos);
    }
 
    fn fail_month(m: &str) {
-      let ans = convert_month(m);
+      let ans = convert_month(&m.to_string());
       assert!(ans.is_err());
    }
 
@@ -106,13 +171,13 @@ mod tests {
       fail_month("Lavinge");
    }
 
-   fn convert_date(dt: &str) -> ErrStr<String> {
+   fn convert_date(dt: &String) -> ErrStr<JsonString> {
       DATE.convert(dt)
    }
 
    fn pass_date(dt: &str, exp: &str) {
-      let ans = convert_date(dt);
-      assert_eq!(Ok(format!("{exp} 00:00:01")), ans);
+      let ans = convert_date(&dt.to_string());
+      assert_eq!(Ok(mk_jstr(&format!("{exp} 00:00:01"))), ans);
    }
 
    #[test]
@@ -128,8 +193,17 @@ mod tests {
 
    #[test]
    fn fail_mayan_date() {
-      let garbage_out = convert_date("12 Caban 15 Ceh");
+      let garbage_out = convert_date(&"12 Caban 15 Ceh".to_string());
       assert!(garbage_out.is_err());
+   }
+
+   #[test]
+   fn test_convert_w7a_header() -> ErrStr<()> {
+      let (hdr, _rest) = load_w7a_header("data/tests/sample-header.w7a")?;
+      let conv = Converter::default();
+      let json = conv.convert(&hdr);
+      assert!(!json.is_err());
+      json.and_then(|j| { assert_eq!(" ", j.as_json()); Ok(())})
    }
 }
 

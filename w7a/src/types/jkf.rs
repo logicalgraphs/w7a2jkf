@@ -17,13 +17,15 @@ pub struct JKF {
 }
 */
 
-struct Header { fields: Lookup }
+pub struct Header { fields: Lookup }
+pub fn mk_jhdr(fields: Lookup) -> Header { Header { fields } }
 
 impl AsJSON for Header {
    fn as_json(&self) -> String { json_block("header", &self.fields) }
 }
 
-struct Initial { preset: Preset }
+pub struct Initial { preset: Preset }
+pub fn mk_init(preset: Preset) -> Initial { Initial { preset } }
 
 impl Default for Initial {
    fn default() -> Self { Self { preset: Preset::PresetHirate } }
@@ -51,11 +53,11 @@ fn json_attrib((k,v): (&String, &String)) -> String {
 
 fn json_hash(hash: &Lookup) -> String {
    let lin: Vec<String> = hash.iter().map(json_attrib).collect();
-   bracket("{{}}", &format!("\n\t\t\t{} ", lin.join(",\n\t\t\t")))
+   bracket("{{}}", &format!("\n\t\t{} ", lin.join(",\n\t\t")))
 }
 
 fn json_block(name: &str, attribs: &Lookup) -> String {
-   format!("\t{}:\n\t\t{}\n", quot(name), json_hash(attribs))
+   format!("\t{}: {}", quot(name), json_hash(attribs))
 }
 
 // ----- TESTS -------------------------------------------------------
