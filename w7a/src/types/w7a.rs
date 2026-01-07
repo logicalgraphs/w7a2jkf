@@ -1,32 +1,36 @@
 use book::{
    file_utils::lines_from_file,
    err_utils::ErrStr,
+   list_utils::ht,
    string_utils::to_string,
    compose
 };
 
 use super::utils::Lookup;
 
-pub struct W7A {
-   header: Header
-   // moves: Moves
-   // state: ParserState
-}
-
-pub struct Header {
-   pub header: Lookup
-}
-
 trait Scanner {
    fn ingest(lines: &[String]) -> ErrStr<(Self, Vec<String>)>
       where Self: Sized;
 }
 
+type Comment = Option<String>;
+
+pub struct W7A {
+   header: Header
+   // game_comment: GameComment,
+   // moves: Vec<Move>
+}
+
 impl Scanner for W7A {
    fn ingest(lines: &[String]) -> ErrStr<(Self, Vec<String>)> {
       let (hdr, rest) = Header::ingest(lines)?;
+      // let (cmt, tail) = scan_game_comment
       Ok((W7A { header: hdr }, rest))
    }
+}
+
+pub struct Header {
+   pub header: Lookup
 }
 
 impl Scanner for Header {
@@ -34,6 +38,64 @@ impl Scanner for Header {
       ingest_header(lines)
    }
 }
+
+/// The GameComment is special:
+
+/// 1. There's only one of them (if present)
+/// 2. it occurs between the Header and the first Move
+
+pub struct GameComment { comment: Comment } 
+
+/*
+impl Scanner for GameComment {
+   fn ingest(lines: &[String]) -> ErrStr<(Self, Vec<String>) {
+      // From here to the line starting with "1." is either the GameComment
+      // or a set of empty lines, which we ignore
+*/
+
+pub struct Move {
+   n: usize,
+   piece: Piece,
+   from: Option<Position>,
+   to: Position,
+   promote: bool,
+   capture: bool,
+   drop: bool,
+   comment: Comment
+}
+
+pub enum Piece { PAWN }
+
+struct Position { x: usize, y: String } 
+
+// ----- helper functions for scanning the W7A file -------------------------
+
+fn is_move(line: &str) -> bool {
+   if line.is_empty() {
+      false
+   } else {
+      let thunks: Vec<&str> = line.split(".").collect();
+      thunks.first()
+            .and_then(|word| Some(word.chars().all(|c| c.is_ascii_digit())))
+            .or(Some(false))
+            .unwrap()
+   }
+}
+
+/*
+fn collect_comment(lines: &[String]) -> ErrStr<(Comment, Vec<String>)> {
+   let mut comment_lines: Vec<String> = Vec::new();
+   let mut collecting = true;
+   let mut file = lines;
+   do {
+      collecting = if let (Some line, rest) = ht(file) {
+         if begins_with_move(&line) {
+            false
+         } else {
+         comment_lines.push(line);
+         file = 
+}
+*/
 
 fn ingest_header(lines: &[String]) -> ErrStr<(Header, Vec<String>)> {
    let (hdr, tail): (Vec<&String>, Vec<&String>) =
@@ -72,10 +134,13 @@ pub fn load_w7a_header(filename: &str) -> ErrStr<(Header, Vec<String>)> {
    ingest_header(&lines)
 }
 
+// ----- TESTS -------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
    use super::*;
 
+   // --- HEADER TESTS ----------------------------------------
    #[test]
    fn test_scan_header_line() {
       let line = &"[Black \"Habu Yoshiharu, Oi\"]".to_string();
@@ -112,6 +177,14 @@ mod tests {
       assert_eq!(4, header.header.len());
       Ok(())
    }
+
+   // --- BODY TESTS -------------------------------------
+
+   #[test]
+   fn test_move_line() {
+      assert!(is_move("75.G3bx3c    07:40:00  07:18:00"));
+   }
+
 
    #[test]
    fn test_create_w7a_from_scan() -> ErrStr<()> {
