@@ -74,6 +74,7 @@ Let's build the header-parser first, then, shall we?
 		"preset": "HIRATE" }
 ```
 
+* 0.04, 2026-01-07: started scanning w7a body; ingesting game-comment
 * 0.03, 2026-01-05: serializing header and initial state to JKF
 * 0.02, 2026-01-05: scanning w7a header-information
 * 0.01, 2026-01-04: parsing English months and `Datish`-values; first tests

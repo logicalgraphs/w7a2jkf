@@ -13,19 +13,17 @@ trait Scanner {
       where Self: Sized;
 }
 
-type Comment = Option<String>;
-
 pub struct W7A {
-   header: Header
-   // game_comment: GameComment,
+   header: Header,
+   game_comment: GameComment
    // moves: Vec<Move>
 }
 
 impl Scanner for W7A {
    fn ingest(lines: &[String]) -> ErrStr<(Self, Vec<String>)> {
-      let (hdr, rest) = Header::ingest(lines)?;
-      // let (cmt, tail) = scan_game_comment
-      Ok((W7A { header: hdr }, rest))
+      let (header, rest) = Header::ingest(lines)?;
+      let (game_comment, tail) = GameComment::ingest(&rest)?;
+      Ok((W7A { header, game_comment }, tail))
    }
 }
 
@@ -39,6 +37,8 @@ impl Scanner for Header {
    }
 }
 
+type Comment = Option<String>;
+
 /// The GameComment is special:
 
 /// 1. There's only one of them (if present)
@@ -46,12 +46,14 @@ impl Scanner for Header {
 
 pub struct GameComment { comment: Comment } 
 
-/*
 impl Scanner for GameComment {
-   fn ingest(lines: &[String]) -> ErrStr<(Self, Vec<String>) {
+   fn ingest(lines: &[String]) -> ErrStr<(Self, Vec<String>)> {
       // From here to the line starting with "1." is either the GameComment
       // or a set of empty lines, which we ignore
-*/
+      let (comment, rest) = collect_comment(lines)?;
+      Ok((GameComment { comment }, rest))
+   }
+}
 
 pub struct Move {
    n: usize,
@@ -82,20 +84,25 @@ fn is_move(line: &str) -> bool {
    }
 }
 
-/*
 fn collect_comment(lines: &[String]) -> ErrStr<(Comment, Vec<String>)> {
    let mut comment_lines: Vec<String> = Vec::new();
-   let mut collecting = true;
-   let mut file = lines;
-   do {
-      collecting = if let (Some line, rest) = ht(file) {
-         if begins_with_move(&line) {
-            false
-         } else {
+   let mut file = lines.to_vec();
+   loop {
+      if let (Some(line), rest) = ht(&file) {
+         if is_move(&line) { break; }
          comment_lines.push(line);
-         file = 
+         file = rest.clone();
+         if rest.is_empty() { break; }
+      } else {
+         break;
+      }
+   };
+   Ok((if comment_lines.iter().all(String::is_empty) {
+      None
+   } else {
+      Some(comment_lines.join(" "))
+   }, file))
 }
-*/
 
 fn ingest_header(lines: &[String]) -> ErrStr<(Header, Vec<String>)> {
    let (hdr, tail): (Vec<&String>, Vec<&String>) =
@@ -153,13 +160,13 @@ mod tests {
       });
    }
 
-   fn load_test_file() -> ErrStr<Vec<String>> {
+   fn load_test_header() -> ErrStr<Vec<String>> {
       load_file("data/tests/sample-header.w7a")
    }
 
    #[test]
    fn test_scan_header() -> ErrStr<()> {
-      let file = load_test_file()?;
+      let file = load_test_header()?;
       let scanned = ingest_header(&file);
       assert!(scanned.is_ok());
       scanned.and_then(|(header, rest)| {
@@ -171,7 +178,7 @@ mod tests {
 
    #[test]
    fn test_create_header_from_scan() -> ErrStr<()> {
-      let file = load_test_file()?;
+      let file = load_test_header()?;
       let (header, rest) = Header::ingest(&file)?;
       assert!(!rest.is_empty());
       assert_eq!(4, header.header.len());
@@ -180,15 +187,71 @@ mod tests {
 
    // --- BODY TESTS -------------------------------------
 
+   // --- game comment scans -----------------------------
+
+   fn load_test_comment() -> ErrStr<Vec<String>> {
+      load_file("data/tests/just-comment.w7a")
+   }
+   fn load_game_comment() -> ErrStr<Vec<String>> {
+      load_file("data/tests/sample-game-comment-with-no-moves.w7a")
+   }
+   fn load_oi_game() -> ErrStr<Vec<String>> {
+      let game_dir = "../data/game_records/reijer_grimberger";
+      let game = "2013-07-11-54th-oi-sen-game-1.w7a";
+      load_file(&format!("{game_dir}/{game}"))
+   }
+
    #[test]
    fn test_move_line() {
       assert!(is_move("75.G3bx3c    07:40:00  07:18:00"));
    }
 
+   #[test]
+   fn fail_move_line() {
+      let sentence1 = "This is the move that Namekata had put his hopes on";
+      let sentence2 = "It defends against the mating";
+      assert!(!is_move(&format!("{sentence1}. {sentence2}")));
+   }
+
+   #[test]
+   fn test_read_just_a_comment() -> ErrStr<()> {
+      let file = load_test_comment()?;
+      let (comment, rest) = collect_comment(&file)?;
+      assert!(comment.is_some());
+      let _ = comment.and_then(|c| { assert!(!c.is_empty()); Some(c) });
+      assert!(rest.is_empty());
+      Ok(())
+   }
+
+   #[test]
+   fn test_ingest_game_comment() -> ErrStr<()> {
+      let file = load_test_comment()?;
+      let (game_comment, rest) = GameComment::ingest(&file)?;
+      assert!(game_comment.comment.is_some());
+      let _ = game_comment.comment.and_then(|c| {
+         assert!(!c.is_empty());
+         Some(())
+      });
+      assert!(rest.is_empty());
+      Ok(())
+   }
+
+   #[test]
+   fn test_ingest_game_comment_no_moves() -> ErrStr<()> {
+      let file = load_game_comment()?;
+      let (game, rest) = W7A::ingest(&file)?;
+      assert!(game.game_comment.comment.is_some());
+      let _ = game.game_comment.comment.and_then(|c| {
+         assert!(!c.is_empty());
+         Some(())
+      });
+      assert!(rest.is_empty());
+      Ok(())
+   }
 
    #[test]
    fn test_create_w7a_from_scan() -> ErrStr<()> {
-      let file = load_test_file()?;
+      let file = load_oi_game()?;
       let (_game, rest) = W7A::ingest(&file)?;
       assert!(rest.is_empty());
       Ok(())
