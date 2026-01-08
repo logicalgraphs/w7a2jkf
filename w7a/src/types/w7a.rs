@@ -95,11 +95,22 @@ pub fn dur(a: Option<&Move>, b: &Move) -> Duration {
    b.total_time - start
 }
 
+#[derive(Debug,Clone,PartialEq)]
 pub enum Piece { PAWN }
 
+use Piece::*;
+
+#[derive(Debug,Clone,PartialEq)]
 struct Position { x: usize, y: String } 
 
 // ----- helper functions for scanning the W7A file -------------------------
+
+fn parse_piece(c: char) -> ErrStr<Piece> {
+   match c.to_ascii_uppercase() {
+      'P' => Ok(PAWN),
+      _   => Err(format!("No piece exists for char {c}"))
+   }
+}
 
 fn is_move(line: &str) -> bool {
    if line.is_empty() {
@@ -296,8 +307,6 @@ mod tests {
 
 // Move-format: 1.P7g-7f     00:00:00  00:00:00
 
-   use Piece::*;
-
    fn mk_test_move(n: usize, seggs: i64) -> Move {
       Move { n, piece: PAWN, from: None, 
              to: Position { x: 7, y: "d".to_string() },
@@ -332,6 +341,21 @@ mod tests {
    fn test_gote_color() {
       let gote = mk_test_move(18, 999);
       assert_eq!(WHITE, color(&gote));
+   }
+
+   // --- pieces -------------------------------------------------
+
+   #[test]
+   fn test_parse_piece() -> ErrStr<()> {
+      let p = parse_piece('p')?;
+      assert_eq!(PAWN, p);
+      Ok(())
+   }
+
+   #[test]
+   fn fail_parse_piece() {
+      let q = parse_piece('Q'); // ... No QUEENS! Take that, Dictator-for-Life!
+      assert!(q.is_err());
    }
 
    // --- ingest -------------------------------------------------
