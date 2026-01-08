@@ -1,3 +1,5 @@
+use chrono::Duration;
+
 use book::{
    file_utils::lines_from_file,
    err_utils::ErrStr,
@@ -55,15 +57,42 @@ impl Scanner for GameComment {
    }
 }
 
+// e.g.: 1.P7g-7f     00:00:00  00:00:00
 pub struct Move {
    n: usize,
    piece: Piece,
-   from: Option<Position>,
+   from: Option<Position>, // None meaning from hand
    to: Position,
    promote: bool,
    capture: bool,
    drop: bool,
+   total_time: Duration,
    comment: Comment
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub enum Color { BLACK, WHITE }
+
+use Color::*;
+
+pub fn color(m: &Move) -> Color {
+   if m.n % 2 == 1 { BLACK } else { WHITE }
+}
+
+/*
+impl Scanner for Move {
+   fn ingest(lines: &[String]) -> ErrStr<(Self, Vec<String>)> {
+      // xxx
+   }
+}
+*/
+
+pub fn dur(a: Option<&Move>, b: &Move) -> Duration {
+   let start =
+      a.and_then(|m| Some(m.total_time))
+       .or(Some(Duration::zero()))
+       .unwrap();
+   b.total_time - start
 }
 
 pub enum Piece { PAWN }
@@ -83,6 +112,20 @@ fn is_move(line: &str) -> bool {
             .unwrap()
    }
 }
+
+/*
+fn parse_move(line: &String) -> ErrStr<Move> {
+   if !is_move(line) {
+      Err(format!("line {line} is not a move"))
+   } else {
+      parse_move1(line)
+   }
+}
+
+fn parse_move1(line: &String) -> ErrStr<Move> {
+   
+}
+*/
 
 fn collect_comment(lines: &[String]) -> ErrStr<(Comment, Vec<String>)> {
    let mut comment_lines: Vec<String> = Vec::new();
@@ -187,7 +230,7 @@ mod tests {
 
    // --- BODY TESTS -------------------------------------
 
-   // --- game comment scans -----------------------------
+   // --- game comment -----------------------------------
 
    fn load_test_comment() -> ErrStr<Vec<String>> {
       load_file("data/tests/just-comment.w7a")
@@ -199,18 +242,6 @@ mod tests {
       let game_dir = "../data/game_records/reijer_grimberger";
       let game = "2013-07-11-54th-oi-sen-game-1.w7a";
       load_file(&format!("{game_dir}/{game}"))
-   }
-
-   #[test]
-   fn test_move_line() {
-      assert!(is_move("75.G3bx3c    07:40:00  07:18:00"));
-   }
-
-   #[test]
-   fn fail_move_line() {
-      let sentence1 = "This is the move that Namekata had put his hopes on";
-      let sentence2 = "It defends against the mating";
-      assert!(!is_move(&format!("{sentence1}. {sentence2}")));
    }
 
    #[test]
@@ -248,6 +279,62 @@ mod tests {
       assert!(rest.is_empty());
       Ok(())
    }
+
+   // --- move tests -------------------------------------
+
+   #[test]
+   fn test_move_line() {
+      assert!(is_move("75.G3bx3c    07:40:00  07:18:00"));
+   }
+
+   #[test]
+   fn fail_move_line() {
+      let sentence1 = "This is the move that Namekata had put his hopes on";
+      let sentence2 = "It defends against the mating";
+      assert!(!is_move(&format!("{sentence1}. {sentence2}")));
+   }
+
+// Move-format: 1.P7g-7f     00:00:00  00:00:00
+
+   use Piece::*;
+
+   fn mk_test_move(n: usize, seggs: i64) -> Move {
+      Move { n, piece: PAWN, from: None, 
+             to: Position { x: 7, y: "d".to_string() },
+             promote: false, capture: false, drop: false,
+             total_time: Duration::seconds(seggs), comment: None }
+   }
+
+   // --- Duration ----------------------------------------
+
+   #[test]
+   fn test_duration_first_move() {
+      let dur2 = mk_test_move(3, 3);
+      assert_eq!(Duration::seconds(3), dur(None, &dur2));
+   }
+
+   #[test]
+   fn test_duration_later_move() {
+      let dur1 = mk_test_move(15, 963);
+      let dur2 = mk_test_move(17, 1150);
+      assert_eq!(Duration::seconds(187), dur(Some(&dur1), &dur2));
+   }
+
+   // --- Color --------------------------------------------------
+
+   #[test]
+   fn test_sente_color() {
+      let sente = mk_test_move(17, 99);
+      assert_eq!(BLACK, color(&sente));
+   }
+
+   #[test]
+   fn test_gote_color() {
+      let gote = mk_test_move(18, 999);
+      assert_eq!(WHITE, color(&gote));
+   }
+
+   // --- ingest -------------------------------------------------
 
    #[test]
    fn test_create_w7a_from_scan() -> ErrStr<()> {
