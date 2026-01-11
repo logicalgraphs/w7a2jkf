@@ -74,6 +74,7 @@ Let's build the header-parser first, then, shall we?
 		"preset": "HIRATE" }
 ```
 
+* 0.06, 2026-01-20: Parsing promoted pieces ('PPP')
 * 0.05, 2026-01-08: Parsing the first board-piece, the pawn (parsing it well, I
 might add 😎
 * 0.04, 2026-01-07: started scanning w7a body; ingesting game-comment

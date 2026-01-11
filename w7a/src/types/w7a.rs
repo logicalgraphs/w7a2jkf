@@ -29,6 +29,8 @@ impl Scanner for W7A {
    }
 }
 
+// ----- HEADER -------------------------------------------------------
+
 pub struct Header {
    pub header: Lookup
 }
@@ -38,6 +40,8 @@ impl Scanner for Header {
       ingest_header(lines)
    }
 }
+
+// ----- COMMENTS -------------------------------------------------------
 
 type Comment = Option<String>;
 
@@ -57,26 +61,18 @@ impl Scanner for GameComment {
    }
 }
 
+// ----- MOVE -------------------------------------------------------
+
 // e.g.: 1.P7g-7f     00:00:00  00:00:00
 pub struct Move {
    n: usize,
    piece: Piece,
    from: Option<Position>, // None meaning from hand
    to: Position,
-   promote: bool,
    capture: bool,
    drop: bool,
    total_time: Duration,
    comment: Comment
-}
-
-#[derive(Debug,Clone,PartialEq)]
-pub enum Color { BLACK, WHITE }
-
-use Color::*;
-
-pub fn color(m: &Move) -> Color {
-   if m.n % 2 == 1 { BLACK } else { WHITE }
 }
 
 /*
@@ -95,21 +91,60 @@ pub fn dur(a: Option<&Move>, b: &Move) -> Duration {
    b.total_time - start
 }
 
-#[derive(Debug,Clone,PartialEq)]
-pub enum Piece { PAWN }
+// ----- COLOR -------------------------------------------------------
 
-use Piece::*;
+#[derive(Debug,Clone,PartialEq)]
+pub enum Color { BLACK, WHITE }
+
+use Color::*;
+
+pub fn color(m: &Move) -> Color {
+   if m.n % 2 == 1 { BLACK } else { WHITE }
+}
+
+// ----- PIECES -------------------------------------------------------
+
+#[derive(Debug,Clone,PartialEq)]
+pub struct Piece {
+   promoted: bool,
+   piece: PieceType
+}
+
+#[derive(Debug,Clone,PartialEq)]
+pub enum PieceType { PAWN }
+
+use PieceType::*;
+
+// ----- POSITION -------------------------------------------------------
 
 #[derive(Debug,Clone,PartialEq)]
 struct Position { x: usize, y: String } 
 
 // ----- helper functions for scanning the W7A file -------------------------
 
-fn parse_piece(c: char) -> ErrStr<Piece> {
+fn parse_piece(move_line: &Vec<char>) -> ErrStr<(Piece, Vec<char>)> {
+   let (promoted, rest) = parse_promotion(move_line)?;
+   let (h, t) = ht(&rest);
+   let c = h.ok_or_else(|| {
+      let line: String = move_line.iter().collect();
+      format!("move line ({line}) terminated before moved piece declared")
+   })?;
+   let piece = parse_piece_type(c)?;
+   Ok((Piece { piece, promoted }, t))
+}
+
+fn parse_piece_type(c: char) -> ErrStr<PieceType> {
    match c.to_ascii_uppercase() {
       'P' => Ok(PAWN),
       _   => Err(format!("No piece exists for char {c}"))
    }
+}
+
+fn parse_promotion(chars: &Vec<char>) -> ErrStr<(bool, Vec<char>)> {
+   let (h, t) = ht(&chars);
+   let promoted = h == Some('+');
+   let rest = if promoted { t } else { chars.clone() };
+   Ok((promoted, rest))
 }
 
 fn is_move(line: &str) -> bool {
@@ -308,10 +343,11 @@ mod tests {
 // Move-format: 1.P7g-7f     00:00:00  00:00:00
 
    fn mk_test_move(n: usize, seggs: i64) -> Move {
-      Move { n, piece: PAWN, from: None, 
-             to: Position { x: 7, y: "d".to_string() },
-             promote: false, capture: false, drop: false,
-             total_time: Duration::seconds(seggs), comment: None }
+      let total_time = Duration::seconds(seggs);
+      let piece = Piece { promoted: false, piece: PAWN };
+      let to = Position { x: 7, y: "d".to_string() };
+      Move { n, piece, from: None, to, capture: false, 
+             drop: false, total_time, comment: None }
    }
 
    // --- Duration ----------------------------------------
@@ -346,16 +382,83 @@ mod tests {
    // --- pieces -------------------------------------------------
 
    #[test]
-   fn test_parse_piece() -> ErrStr<()> {
-      let p = parse_piece('p')?;
+   fn test_parse_piece_type() -> ErrStr<()> {
+      let p = parse_piece_type('p')?;
       assert_eq!(PAWN, p);
       Ok(())
    }
 
    #[test]
-   fn fail_parse_piece() {
-      let q = parse_piece('Q'); // ... No QUEENS! Take that, Dictator-for-Life!
+   fn fail_parse_piece_type() {
+      let q = parse_piece_type('Q'); // ... No QUEENS!?
+                                     // Take that, Dictator-for-Life!
       assert!(q.is_err());
+   }
+
+   fn marshal_line(move_line: &str) -> (Vec<char>, usize) {
+      let parts: Vec<&str> = move_line.split(".").collect();
+      let body = parts[1];
+      let len = body.len();
+      let chars: Vec<char> = body.chars().collect();
+      (chars, len)
+   }
+
+   fn marshal_promotion_test(move_line: &str)
+         -> ErrStr<(bool, Vec<char>, usize)> {
+      let (chars, len) = marshal_line(move_line);
+      let (p, rest) = parse_promotion(&chars)?;
+      Ok((p, rest, len))
+   }
+
+   #[test]
+   fn test_no_promotion() -> ErrStr<()> {
+      let move_line = "1.P7g-7f     00:00:00  00:00:00";
+      let (p, rest, len) = marshal_promotion_test(move_line)?;
+      assert!(!p);
+      assert_eq!(len, rest.len());
+      Ok(())
+   }
+
+   #[test]
+   fn test_promotion() -> ErrStr<()> {
+      let move_line = "65.+P4cx4b   07:03:00  07:08:00";
+      let (p, rest, len) = marshal_promotion_test(move_line)?;
+      assert!(p);
+      assert_eq!(len-1, rest.len());
+      Ok(())
+   }
+
+   fn marshal_piece_test(line: &str) -> ErrStr<(Piece, Vec<char>, usize)> {
+      let (chars, len) = marshal_line(line);
+      let (p, rest) = parse_piece(&chars)?;
+      Ok((p, rest, len))
+   }
+
+   #[test]
+   fn test_piece() -> ErrStr<()> {
+      let move_line = "1.P7g-7f     00:00:00  00:00:00";
+      let (p, rest, len) = marshal_piece_test(move_line)?;
+      assert!(!p.promoted);
+      assert_eq!(PAWN, p.piece);
+      assert_eq!(len-1, rest.len());
+      Ok(())
+   }
+
+   #[test]
+   fn test_promoted_piece() -> ErrStr<()> {
+      let move_line = "65.+P4cx4b   07:03:00  07:08:00";
+      let (p, rest, len) = marshal_piece_test(move_line)?;
+      assert!(p.promoted);
+      assert_eq!(PAWN, p.piece);
+      assert_eq!(len-2, rest.len());
+      Ok(())
+   }
+
+   #[test]
+   fn fail_parse_piece() {
+      let move_line = "3.dsflkjdlkjds";
+      let test = marshal_piece_test(move_line);
+      assert!(test.is_err());
    }
 
    // --- ingest -------------------------------------------------
